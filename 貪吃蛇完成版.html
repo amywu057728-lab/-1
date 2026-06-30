@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>進階版貪食蛇 - 米黃橘色風</title>
+    <style>
+        body {
+            background-color: #FFF9E3; /* 米黃色背景 */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            font-family: "Microsoft JhengHei", sans-serif;
+            color: #E67E22;
+        }
+
+        h1 { margin-bottom: 5px; }
+
+        #ui-layer {
+            margin-bottom: 10px;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        #score-board {
+            font-size: 22px;
+            font-weight: bold;
+            width: 100%;
+            text-align: center;
+            margin-bottom: 5px;
+        }
+
+        #game-container {
+            position: relative;
+            border: 5px solid #FF8C00;
+            background-color: #FFFDF5;
+            box-shadow: 0 0 20px rgba(230, 126, 34, 0.2);
+        }
+
+        canvas { display: block; }
+
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 249, 227, 0.9);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+
+        button {
+            padding: 8px 15px;
+            font-size: 14px;
+            background-color: #FF8C00;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: 0.2s;
+            font-weight: bold;
+        }
+
+        button:hover { background-color: #E67E22; }
+        button:disabled { background-color: #d2b48c; cursor: not-allowed; }
+        
+        .ai-active { background-color: #27ae60 !important; }
+
+        .instructions {
+            margin-top: 15px;
+            font-size: 13px;
+            color: #D35400;
+            text-align: center;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>貪食蛇遊戲</h1>
+
+    <div id="score-board">分數: 0</div>
+    <div id="ui-layer">
+        <button id="startBtn" onclick="pressStart()">開始遊戲</button>
+        <button id="pauseBtn" onclick="togglePause()">暫停</button>
+        <button id="aiBtn" onclick="toggleAI()">自動代打: 關閉</button>
+    </div>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="400" height="400"></canvas>
+        
+        <!-- 遮罩畫面 -->
+        <div id="overlay" class="overlay">
+            <h2 id="overlay-title">遊戲準備就緒</h2>
+            <p id="final-score"></p>
+            <button id="resetBtn" onclick="pressStart()">重新開始</button>
+        </div>
+    </div>
+
+    <div class="instructions">
+        [方向鍵] 控制移動 | [自動代打] AI 會幫你找食物<br>
+        撞牆會循環穿透 | 吃到食物會噴發星星 ★
+    </div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const scoreElement = document.getElementById("score-board");
+        const overlay = document.getElementById("overlay");
+        const overlayTitle = document.getElementById("overlay-title");
+        const finalScoreElement = document.getElementById("final-score");
+        const aiBtn = document.getElementById("aiBtn");
+
+        const gridSize = 20;
+        const tileCount = canvas.width / gridSize;
+
+        let score = 0;
+        let dx = 0; // 水平位移 (1, 0, -1)
+        let dy = -1; // 垂直位移
+        let snake = [{x: 10, y: 10}, {x: 10, y: 11}, {x: 10, y: 12}];
+        let food = {x: 5, y: 5};
+        
+        let gameRunning = false;
+        let isPaused = false;
+        let isAI = false;
+        let gameLoopHandle = null;
+        
+        let stars = []; // 星星特效
+
+        // 鍵盤監聽
+        document.addEventListener("keydown", changeDirection);
+
+        // --- 核心流程 ---
+
+        function pressStart() {
+            // 重置狀態
+            score = 0;
+            scoreElement.innerHTML = "分數: 0";
+            dx = 0; dy = -1;
+            snake = [{x: 10, y: 10}, {x: 10, y: 11}, {x: 10, y: 12}];
+            stars = [];
+            isPaused = false;
+            gameRunning = true;
+            
+            overlay.style.display = "none";
+            document.getElementById("pauseBtn").innerText = "暫停";
+            
+            createFood();
+            
+            if (gameLoopHandle) clearInterval(gameLoopHandle);
+            gameLoopHandle = setInterval(update, 100);
+        }
+
+        function update() {
+            if (isPaused) return;
+
+            if (isAI) autoPlayLogic();
+
+            advanceSnake();
+
+            if (checkHitSelf()) {
+                endGame();
+                return;
+            }
+
+            draw();
+        }
+
+        function advanceSnake() {
+            const head = {x: snake[0].x + dx, y: snake[0].y + dy};
+
+            // 牆壁穿透
+            if (head.x < 0) head.x = tileCount - 1;
+            else if (head.x >= tileCount) head.x = 0;
+            if (head.y < 0) head.y = tileCount - 1;
+            else if (head.y >= tileCount) head.y = 0;
+
+            snake.unshift(head);
+
+            // 吃到食物
+            if (head.x === food.x && head.y === food.y) {
+                score += 10;
+                scoreElement.innerHTML = "分數: " + score;
+                spawnStars(head.x, head.y); // 在蛇頭位置產生星星
+                createFood();
+            } else {
+                snake.pop();
+            }
+        }
+
+        // --- 代打 AI 邏輯 ---
+        function autoPlayLogic() {
+            const head = snake[0];
+            // 簡單的貪婪演算法：判斷食物在哪個方向
+            // 考慮到穿透牆壁，這裡只做基礎的座標趨近
+            let nextDx = dx;
+            let nextDy = dy;
+
+            if (head.x < food.x && dx !== -1) { nextDx = 1; nextDy = 0; }
+            else if (head.x > food.x && dx !== 1) { nextDx = -1; nextDy = 0; }
+            else if (head.y < food.y && dy !== -1) { nextDx = 0; nextDy = 1; }
+            else if (head.y > food.y && dy !== 1) { nextDx = 0; nextDy = -1; }
+
+            // 基礎防撞：如果下一格會撞到自己，試著轉彎
+            const nextX = (head.x + nextDx + tileCount) % tileCount;
+            const nextY = (head.y + nextDy + tileCount) % tileCount;
+            
+            if (snake.some(p => p.x === nextX && p.y === nextY)) {
+                // 嘗試轉向
+                if (nextDx !== 0) { nextDx = 0; nextDy = 1; }
+                else { nextDx = 1; nextDy = 0; }
+            }
+
+            dx = nextDx;
+            dy = nextDy;
+        }
+
+        // --- 特效與繪圖 ---
+
+        function spawnStars(x, y) {
+            // 產生 5 顆向四周飄散的星星
+            for (let i = 0; i < 5; i++) {
+                stars.push({
+                    x: x * gridSize + gridSize/2,
+                    y: y * gridSize + gridSize/2,
+                    vx: (Math.random() - 0.5) * 4,
+                    vy: (Math.random() - 0.5) * 4,
+                    life: 20,
+                    size: 15 + Math.random() * 10
+                });
+            }
+        }
+
+        function draw() {
+            // 清空
+            ctx.fillStyle = "#FFFDF5";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 格線
+            ctx.strokeStyle = "#FFE4B5";
+            ctx.lineWidth = 0.5;
+            for(let i=0; i<=canvas.width; i+=gridSize) {
+                ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,canvas.height); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(canvas.width,i); ctx.stroke();
+            }
+
+            // 食物
+            ctx.fillStyle = "#E67E22";
+            ctx.beginPath();
+            ctx.arc(food.x * gridSize + gridSize/2, food.y * gridSize + gridSize/2, gridSize/2 - 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 蛇
+            snake.forEach((part, index) => {
+                ctx.fillStyle = (index === 0) ? "#FF8C00" : "#FFA500";
+                ctx.fillRect(part.x * gridSize, part.y * gridSize, gridSize - 1, gridSize - 1);
+            });
+
+            // 星星特效更新與繪製
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            for (let i = stars.length - 1; i >= 0; i--) {
+                let s = stars[i];
+                ctx.globalAlpha = s.life / 20;
+                ctx.font = `${s.size}px Arial`;
+                ctx.fillStyle = "#FFD700";
+                ctx.fillText("★", s.x, s.y);
+                s.x += s.vx;
+                s.y += s.vy;
+                s.life--;
+                if (s.life <= 0) stars.splice(i, 1);
+            }
+            ctx.globalAlpha = 1.0;
+        }
+
+        // --- 功能控制 ---
+
+        function togglePause() {
+            if (!gameRunning) return;
+            isPaused = !isPaused;
+            const pauseBtn = document.getElementById("pauseBtn");
+            if (isPaused) {
+                pauseBtn.innerText = "繼續";
+                overlayTitle.innerText = "遊戲暫停";
+                finalScoreElement.innerText = "目前分數: " + score;
+                overlay.style.display = "flex";
+            } else {
+                pauseBtn.innerText = "暫停";
+                overlay.style.display = "none";
+            }
+        }
+
+        function toggleAI() {
+            isAI = !isAI;
+            if (isAI) {
+                aiBtn.innerText = "自動代打: 開啟";
+                aiBtn.classList.add("ai-active");
+            } else {
+                aiBtn.innerText = "自動代打: 關閉";
+                aiBtn.classList.remove("ai-active");
+            }
+        }
+
+        function checkHitSelf() {
+            for (let i = 1; i < snake.length; i++) {
+                if (snake[i].x === snake[0].x && snake[i].y === snake[0].y) return true;
+            }
+            return false;
+        }
+
+        function endGame() {
+            gameRunning = false;
+            clearInterval(gameLoopHandle);
+            overlayTitle.innerText = "遊戲結束";
+            finalScoreElement.innerText = "最後得分: " + score;
+            overlay.style.display = "flex";
+        }
+
+        function createFood() {
+            food.x = Math.floor(Math.random() * tileCount);
+            food.y = Math.floor(Math.random() * tileCount);
+            if (snake.some(p => p.x === food.x && p.y === food.y)) createFood();
+        }
+
+        function changeDirection(event) {
+            if (isPaused || isAI) return; // AI 開啟時手動無效
+            const keyPressed = event.keyCode;
+            const UP = 38, DOWN = 40, LEFT = 37, RIGHT = 39;
+            if (keyPressed === LEFT && dx === 0) { dx = -1; dy = 0; }
+            if (keyPressed === UP && dy === 0) { dx = 0; dy = -1; }
+            if (keyPressed === RIGHT && dx === 0) { dx = 1; dy = 0; }
+            if (keyPressed === DOWN && dy === 0) { dx = 0; dy = 1; }
+        }
+
+        // 初始繪圖
+        draw();
+        overlay.style.display = "flex"; // 顯示初始開始畫面
+    </script>
+</body>
+</html>
