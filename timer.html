@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>每週工時計價器</title>
+    <style>
+        :root {
+            --bg-color: #FDFBF7;
+            --primary-dark: #1e3124;
+            --primary-light: #9CAF88;
+            --accent-red: #E35336;
+            --white: #ffffff;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            font-family: "Source Han Sans TW", "Source Han Sans", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            color: var(--primary-dark);
+        }
+
+        .card {
+            background-color: var(--white);
+            width: 100%;
+            max-width: 400px;
+            padding: 2.5rem 2rem;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(30, 49, 36, 0.08);
+        }
+
+        h2 {
+            text-align: center;
+            margin: 0 0 1.5rem 0;
+            font-weight: 700;
+            border-bottom: 2px solid var(--primary-light);
+            padding-bottom: 0.5rem;
+        }
+
+        .input-group {
+            margin-bottom: 1.2rem;
+            padding: 1rem;
+            border: 1px solid #f0f0f0;
+            border-radius: 10px;
+            background-color: #fafafa;
+        }
+
+        label {
+            display: block;
+            font-size: 0.9rem;
+            font-weight: bold;
+            margin-bottom: 0.6rem;
+            color: var(--primary-dark);
+        }
+
+        select, input {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 10px;
+            border: 1px solid var(--primary-light);
+            border-radius: 6px;
+            font-size: 1rem;
+            box-sizing: border-box;
+            background-color: white;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary-dark);
+        }
+
+        button {
+            width: 100%;
+            padding: 15px;
+            background-color: var(--accent-red);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+            box-shadow: 0 4px 0 #b33d26;
+        }
+
+        button:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px 0 #b33d26;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        .result-section {
+            margin-top: 2rem;
+            padding-top: 1.5rem;
+            border-top: 2px dashed var(--primary-light);
+            display: none;
+        }
+
+        .result-line {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.8rem;
+            font-size: 1rem;
+            color: #555;
+        }
+
+        .total-box {
+            margin-top: 1.5rem;
+            padding: 1.5rem 1rem;
+            background-color: #f0f4f1;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .total-label {
+            font-size: 1rem;
+            color: var(--primary-dark);
+            font-weight: bold;
+            margin-bottom: 5px;
+            display: block;
+        }
+
+        .total-amount {
+            font-size: 2.5rem;
+            color: var(--accent-red);
+            font-weight: 900;
+            display: block;
+            letter-spacing: -1px;
+        }
+
+        .hourly-info {
+            text-align: center;
+            font-size: 0.85rem;
+            background: var(--primary-dark);
+            color: white;
+            width: fit-content;
+            margin: -10px auto 20px auto;
+            padding: 2px 12px;
+            border-radius: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>每週工時計價器</h2>
+    <div class="hourly-info">時薪 NT$ 220</div>
+
+    <div class="input-group">
+        <label>打工店家 1</label>
+        <select id="shop1">
+            <option value="村村食堂">村村食堂</option>
+            <option value="潮味決">潮味決</option>
+        </select>
+        <input type="number" id="hours1" placeholder="輸入上班時數" step="0.5" min="0">
+    </div>
+
+    <div class="input-group">
+        <label>打工店家 2</label>
+        <select id="shop2">
+            <option value="潮味決">潮味決</option>
+            <option value="村村食堂">村村食堂</option>
+        </select>
+        <input type="number" id="hours2" placeholder="輸入上班時數" step="0.5" min="0">
+    </div>
+
+    <button onclick="calculate()">計算本週薪資</button>
+
+    <div id="resultDisplay" class="result-section">
+        <div class="result-line">
+            <span id="res-shop1-name">店家1</span>
+            <span id="res-subtotal1">NT$ 0</span>
+        </div>
+        <div class="result-line">
+            <span id="res-shop2-name">店家2</span>
+            <span id="res-subtotal2">NT$ 0</span>
+        </div>
+        <div class="result-line" style="border-top: 1px solid #eee; padding-top: 10px; font-weight: bold;">
+            <span>打工總時數</span>
+            <span id="res-total-hours">0 小時</span>
+        </div>
+
+        <div class="total-box">
+            <span class="total-label">應領薪資總計</span>
+            <span id="res-total-amount" class="total-amount">NT$ 0</span>
+        </div>
+    </div>
+</div>
+
+<script>
+    function calculate() {
+        const RATE = 220;
+
+        // 取得輸入資料
+        const s1 = document.getElementById('shop1').value;
+        const h1 = parseFloat(document.getElementById('hours1').value) || 0;
+        const s2 = document.getElementById('shop2').value;
+        const h2 = parseFloat(document.getElementById('hours2').value) || 0;
+
+        // 運算
+        const sub1 = h1 * RATE;
+        const sub2 = h2 * RATE;
+        const totalH = h1 + h2;
+        const totalA = sub1 + sub2;
+
+        // 格式化千分位
+        const formatCurrency = (num) => 'NT$ ' + num.toLocaleString('zh-TW');
+
+        // 顯示結果
+        document.getElementById('res-shop1-name').innerText = s1 + ' 小計：';
+        document.getElementById('res-subtotal1').innerText = formatCurrency(sub1);
+        
+        document.getElementById('res-shop2-name').innerText = s2 + ' 小計：';
+        document.getElementById('res-subtotal2').innerText = formatCurrency(sub2);
+        
+        document.getElementById('res-total-hours').innerText = totalH + ' 小時';
+        document.getElementById('res-total-amount').innerText = formatCurrency(totalA);
+
+        // 動態開啟結果區塊
+        document.getElementById('resultDisplay').style.display = 'block';
+    }
+</script>
+
+</body>
+</html>
